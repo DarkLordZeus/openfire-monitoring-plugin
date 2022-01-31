@@ -213,6 +213,7 @@ public class ConversationUtils {
             document.add( new Paragraph().add(new Text("\n")));
 
             final Paragraph messageParagraph = new Paragraph();
+            boolean foundReadableMessages = false;
             for (ArchivedMessage message : conversation.getMessages(conversationManager))
             {
                 String time = JiveGlobals.formatTime(message.getSentDate());
@@ -271,6 +272,7 @@ public class ConversationUtils {
 
                 if (bodyLessText!=null||body!=null)
                 {
+                    foundReadableMessages=true;
                     if (!message.isRoomEvent()) {
                         /*
                          * If body is null, we add the resource to see which device has sent the message.
@@ -298,6 +300,13 @@ public class ConversationUtils {
                     }
                     messageParagraph.add(new Text("\n"));
                 }
+            }
+            
+
+            if (conversation.getMessages(conversationManager).size() == 0||!foundReadableMessages) {
+                messageParagraph.add(new Text(LocaleUtils.getLocalizedString("archive.search.results.archive_disabled",
+                        MonitoringConstants.NAME) ));
+                messageParagraph.add(new Text("\n"));
             }
 
             document.add(messageParagraph);
@@ -358,6 +367,7 @@ public class ConversationUtils {
         info.setDate(JiveGlobals.formatDateTime(conversation.getStartDate()));
         info.setLastActivity(JiveGlobals.formatTime(conversation.getLastActivity()));
         // Create body.
+        boolean foundReadableMessages = false;
         final StringBuilder builder = new StringBuilder();
         builder.append("<table width=100%>");
         for (ArchivedMessage message : conversation.getMessages(conversationManager)) {
@@ -421,6 +431,7 @@ public class ConversationUtils {
 
             if (bodyLessText!=null||body!=null)
             {
+                foundReadableMessages=true;
                 builder.append("<tr valign=top>");
                 if (!message.isRoomEvent()) {
                     builder.append("<td width=1% nowrap class=" + cssLabel + ">").append("[").append(time).append("]").append("</td>");
@@ -439,7 +450,7 @@ public class ConversationUtils {
             }
         }
 
-        if (conversation.getMessages(conversationManager).size() == 0) {
+        if (conversation.getMessages(conversationManager).size() == 0||!foundReadableMessages) {
             builder.append("<span class=small-description>" +
                 LocaleUtils.getLocalizedString("archive.search.results.archive_disabled",
                         MonitoringConstants.NAME) +
