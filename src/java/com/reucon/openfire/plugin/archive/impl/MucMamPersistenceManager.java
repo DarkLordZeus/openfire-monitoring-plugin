@@ -25,6 +25,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.text.SimpleDateFormat;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.Collections;
@@ -44,6 +45,12 @@ public class MucMamPersistenceManager implements PersistenceManager {
         .setDynamic(true)
         .setPlugin(MonitoringConstants.PLUGIN_NAME)
         .build();
+    private static SystemProperty<Boolean> USE_GAJIM_FIX = SystemProperty.Builder.ofType(Boolean.class)
+            .setKey("conversation.database.use-gajim-fix")
+            .setDefaultValue(false)
+            .setDynamic(true)
+            .setPlugin(MonitoringConstants.PLUGIN_NAME)
+            .build();
     private static final int DEFAULT_MAX = 100;
 
     @Override
@@ -72,9 +79,67 @@ public class MucMamPersistenceManager implements PersistenceManager {
             endDate = new Date();
         }
 
-        final Long after = parseAndValidate( xmppResultSet.getAfter(), room, useStableID, "after" );
-        final Long before = parseAndValidate( xmppResultSet.getBefore(), room, useStableID, "before" );
-        final int maxResults = xmppResultSet.getMax() != null ? xmppResultSet.getMax() : DEFAULT_MAX;
+        Log.debug("findMessages START TESTING");
+        Long after = null;
+        if (USE_GAJIM_FIX.getValue())
+        {
+            Log.debug("TEST MATCH AFTER",xmppResultSet.getAfter());
+            if (xmppResultSet.getAfter()!=null&&xmppResultSet.getAfter().matches("[a-zA-Z0-9]{1,}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{1,}"))
+            {
+                Log.debug("TEST MATCH OK");
+                Date date = getDateFromMessage(xmppResultSet.getAfter(),false);
+                if (date!=null)
+                {
+                    after=null;
+                    Log.debug("findMessages SET startDate ");
+                    startDate=date;
+                }else {
+                    Log.debug("findMessages A1");
+                    after = parseAndValidate( xmppResultSet.getAfter(), room, useStableID, "after" );
+                }
+            }
+            else {
+                Log.debug("findMessages A2");
+                after = parseAndValidate( xmppResultSet.getAfter(), room, useStableID, "after" );
+            }
+        }
+        else {
+            Log.debug("findMessages A3");
+            after = parseAndValidate( xmppResultSet.getAfter(), room, useStableID, "after" );
+        }
+
+        Long before = null;
+        if (USE_GAJIM_FIX.getValue())
+        {
+            Log.debug("TEST MATCH BEFORE",xmppResultSet.getBefore());
+            if (xmppResultSet.getBefore()!=null&&xmppResultSet.getBefore().matches("[a-zA-Z0-9]{1,}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}-[a-zA-Z0-9]{1,}"))
+            {
+                Log.debug("TEST MATCH OK");
+
+                Date date = getDateFromMessage(xmppResultSet.getBefore(),true);
+                if (date!=null)
+                {
+                    before=null;
+                    Log.debug("findMessages SET endDate ");
+                    endDate=date;
+                }
+                else
+                {
+                    Log.debug("findMessages B1");
+                    before = parseAndValidate( xmppResultSet.getBefore(), room, useStableID, "before" );
+                }
+            }
+            else {
+                Log.debug("findMessages B2");
+                before = parseAndValidate( xmppResultSet.getBefore(), room, useStableID, "before" );
+            }
+        }
+        else {
+            Log.debug("findMessages B3");
+            before = parseAndValidate( xmppResultSet.getBefore(), room, useStableID, "before" );
+        }
+
+        final int maxResults = !USE_GAJIM_FIX.getValue()?(xmppResultSet.getMax() != null ? xmppResultSet.getMax() : DEFAULT_MAX):500;
         final boolean isPagingBackwards = xmppResultSet.isPagingBackwards();
 
         final List<ArchivedMessage> msgs;
@@ -220,6 +285,48 @@ public class MucMamPersistenceManager implements PersistenceManager {
         }
 
         return result;
+    }
+
+    private static Date getDateFromMessage(String identifier,boolean orderASC) {
+        Connection connection = null;
+        PreparedStatement pstmt = null;
+        ResultSet rs = null;
+        try {
+            connection = DbConnectionManager.getConnection();
+            String sql = "";
+            if (USE_OPENFIRE_TABLES.getValue()) {
+                sql = "SELECT logTime FROM ofMucConversationLog WHERE stanza like ? order by logTime "+(orderASC?"ASC":"DESC");
+                pstmt = connection.prepareStatement(sql);
+                pstmt.setString( 1, "%"+identifier+"%");
+                sql = sql.replaceFirst("\\?", "'%"+identifier+"%'");
+            } else {
+                sql = "SELECT sentdate FROM ofMessageArchive WHERE stanza like ? order by sentdate "+(orderASC?"ASC":"DESC");
+                pstmt = connection.prepareStatement(sql);
+                pstmt.setString( 1, "%"+identifier+"%");
+                sql = sql.replaceFirst("\\?", "'%"+identifier+"%'");
+            }
+            Log.debug("getDateFromMessage: {}",sql);
+
+            rs = pstmt.executeQuery();
+            if ( rs.next() ) {
+                if (USE_OPENFIRE_TABLES.getValue()) {
+                    String dateStr = rs.getNString(1);
+                    dateStr = dateStr.replaceAll("^0+(?!$)", "");
+                    return new Date(Long.parseLong(dateStr));
+                }
+                else {
+                    long dateLong = rs.getLong(1);
+                    return new Date(dateLong);
+                }
+            }
+
+            return null;
+        } catch (Exception ex) {
+            Log.warn("SQL failure while trying to get Date from Message", ex);
+            return null;
+        } finally {
+            DbConnectionManager.closeConnection(rs, pstmt, connection);
+        }
     }
 
     /**
