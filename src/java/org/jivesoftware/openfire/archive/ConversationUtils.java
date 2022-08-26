@@ -37,8 +37,8 @@ import com.itextpdf.kernel.pdf.xobject.PdfImageXObject;
 import com.itextpdf.layout.Document;
 import com.itextpdf.layout.element.Paragraph;
 import com.itextpdf.layout.element.Text;
-import com.itextpdf.layout.property.Leading;
-import com.itextpdf.layout.property.Property;
+import com.itextpdf.layout.properties.Leading;
+import com.itextpdf.layout.properties.Property;
 import org.jivesoftware.openfire.XMPPServer;
 import org.jivesoftware.openfire.archive.EmptyMessageUtils.EmptyMessageType;
 import org.jivesoftware.openfire.plugin.MonitoringPlugin;
@@ -474,7 +474,7 @@ public class ConversationUtils {
         if (html) {
             UserManager userManager = UserManager.getInstance();
             if (XMPPServer.getInstance().isLocal(jid) &&
-                userManager.isRegisteredUser(jid.getNode())) {
+                userManager.isRegisteredUser(jid, false)) {
                 formattedJID = "<a href='/user-properties.jsp?username=" +
                     jid.getNode() + "'>" + jid.toBareJID() + "</a>";
             }
